@@ -35,6 +35,16 @@ Running `npx expo prebuild --clean` will delete the folders before generating th
 
 ## Running
 
+Before running on an actual iPhone, create a local `.env` from `.env.example` and set:
+
+- `APP_VARIANT=development`
+- `DEFAULT_SERVER_URL=http://<your-mac-or-server-lan-ip>:8080`
+- `IOS_BUNDLE_IDENTIFIER`
+- `IOS_DEV_BUNDLE_IDENTIFIER`
+- `IOS_APPLE_TEAM_ID`
+
+Use a LAN IP for the server URL. `localhost` on the phone is the phone itself.
+
 Use one of the following to start the metro server, prebuild if necessary, run the app on a simulator or connected device, and start the metro server:
 
 ```bash
@@ -43,6 +53,14 @@ npx expo run:ios
 ```
 
 Adding `--device` will let you pick a simulator or connected device.
+
+Helpful iPhone commands:
+
+```bash
+corepack pnpm prebuild:ios
+corepack pnpm ios:device
+APP_VARIANT=development corepack pnpm ios:release
+```
 
 If you have a current development build and just want to start the metro server, use:
 
@@ -55,6 +73,8 @@ Then launch the development build on your device or simulator.
 ## Dev Tools
 
 Set the environment variable `APP_VARIANT` to `production` to disable the dev menu. As a fallback this menu is also only available in expo __development__ builds. 
+
+HTTP server URLs are allowed only for non-production app variants. Production builds require HTTPS.
 
 ### Seed data
 

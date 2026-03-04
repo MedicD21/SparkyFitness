@@ -20,12 +20,12 @@ import Icon from '../components/Icon';
 import { shareDiagnosticReport, sanitizeQueryKey } from '../services/diagnosticReportService';
 import type { DiagnosticQueryState } from '../types/diagnosticReport';
 import type { HealthMetricStates } from '../types/healthRecords';
-import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { StackScreenProps } from '@react-navigation/stack';
 import type { NativeBottomTabScreenProps } from '@bottom-tabs/react-navigation';
 import type { RootStackParamList, TabParamList } from '../types/navigation';
+import { getDefaultServerUrl, isHttpServerUrlAllowed, shouldShowDevTools } from '../config/appConfig';
 
 type SettingsScreenProps = CompositeScreenProps<
   NativeBottomTabScreenProps<TabParamList, 'Settings'>,
@@ -72,7 +72,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
       setActiveConfigId(allConfigs[0].id);
       setCurrentConfigId(allConfigs[0].id);
     } else if (allConfigs.length === 0) {
-      setUrl('');
+      setUrl(getDefaultServerUrl() ?? '');
       setApiKey('');
       setActiveConfigId(null);
       setCurrentConfigId(null);
@@ -133,7 +133,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
       Alert.alert('Error', 'Please enter both a server URL and an API key.');
       return;
     }
-    if (!__DEV__ && url.toLowerCase().startsWith('http://')) {
+    if (!isHttpServerUrlAllowed() && url.toLowerCase().startsWith('http://')) {
       Alert.alert('Error', 'HTTPS is required for server connections.');
       return;
     }
@@ -160,7 +160,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
   };
 
   const handleSetActiveConfig = async (configId: string): Promise<void> => {
-    if (!__DEV__) {
+    if (!isHttpServerUrlAllowed()) {
       const config = serverConfigs.find((c) => c.id === configId);
       if (config?.url.toLowerCase().startsWith('http://')) {
         Alert.alert('Error', 'HTTPS is required for server connections. Please edit this configuration to use HTTPS.');
@@ -416,11 +416,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
             No personal health or food data is included. Nothing is sent automatically.
           </Text>
 
-          {__DEV__ &&
-            (Constants.expoConfig?.extra?.APP_VARIANT === 'development' ||
-              Constants.expoConfig?.extra?.APP_VARIANT === 'dev') && (
-              <DevTools />
-            )}
+          {shouldShowDevTools() && <DevTools />}
 
 
           <View className="items-center z-100">

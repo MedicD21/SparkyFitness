@@ -1,11 +1,18 @@
 const { log } = require("../config/logging");
 const userRepository = require("../models/userRepository"); // Import userRepository
-const { getClient, getSystemClient } = require("../db/poolManager"); // Import getClient and getSystemClient
-const { canAccessUserData } = require("../utils/permissionUtils");
+const {
+  getSingleUserRequestContext,
+  isSingleUserModeEnabled,
+} = require("../utils/singleUserMode");
 
 const authenticate = async (req, res, next) => {
   // Allow public access to the /api/auth/settings endpoint
   if (req.path === "/settings") {
+    return next();
+  }
+
+  if (isSingleUserModeEnabled()) {
+    Object.assign(req, getSingleUserRequestContext());
     return next();
   }
 

@@ -12,6 +12,14 @@ jest.mock('../../src/services/LogService', () => ({
 const mockGetActiveServerConfig = getActiveServerConfig as jest.MockedFunction<
   typeof getActiveServerConfig
 >;
+const mockConstants = jest.requireMock('expo-constants').default as {
+  expoConfig: {
+    extra: {
+      APP_VARIANT: string;
+      DEFAULT_SERVER_URL: string | null;
+    };
+  };
+};
 
 describe('apiClient', () => {
   const mockFetch = jest.fn();
@@ -19,6 +27,8 @@ describe('apiClient', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     global.fetch = mockFetch;
+    mockConstants.expoConfig.extra.APP_VARIANT = 'production';
+    mockConstants.expoConfig.extra.DEFAULT_SERVER_URL = null;
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -255,8 +265,31 @@ describe('apiClient', () => {
         expect(mockFetch).not.toHaveBeenCalled();
       });
 
-      test('allows HTTP URLs in development mode', async () => {
+      test('allows HTTP URLs in non-production app variants', async () => {
+        (global as any).__DEV__ = false;
+        mockConstants.expoConfig.extra.APP_VARIANT = 'development';
+        mockGetActiveServerConfig.mockResolvedValue({
+          ...testConfig,
+          url: 'http://localhost:3000',
+        });
+        mockFetch.mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        });
+
+        const result = await apiFetch({
+          endpoint: '/api/test',
+          serviceName: 'Test API',
+          operation: 'fetch test',
+        });
+
+        expect(result).toEqual({ success: true });
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      test('falls back to __DEV__ when no app variant is set', async () => {
         (global as any).__DEV__ = true;
+        mockConstants.expoConfig.extra.APP_VARIANT = '';
         mockGetActiveServerConfig.mockResolvedValue({
           ...testConfig,
           url: 'http://localhost:3000',

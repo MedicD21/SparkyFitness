@@ -48,6 +48,16 @@ GitHub needs your key and passwords to sign the app.
 
 We use Expo's cloud service (EAS) to build for iOS because it handles Apple Certificates automatically.
 
+Before building for your own iPhone, create a local `.env` from `.env.example` and set:
+
+```bash
+APP_VARIANT=development
+DEFAULT_SERVER_URL=http://<your-server-lan-ip>:8080
+IOS_BUNDLE_IDENTIFIER=com.yourname.sparkyfitness
+IOS_DEV_BUNDLE_IDENTIFIER=com.yourname.sparkyfitness.dev
+IOS_APPLE_TEAM_ID=YOURTEAMID
+```
+
 ### Step 1: Install EAS CLI
 ```bash
 npm install -g eas-cli
@@ -76,10 +86,12 @@ By default, `npx expo run:ios` builds a **Debug** version that needs your Mac to
 **To install a Standalone version (Works Offline/Away from Mac):**
 Run this command:
 ```bash
-npx expo run:ios --configuration Release --device
+APP_VARIANT=development corepack pnpm ios:release
 ```
 *   **Benefits**: Runs offline. Faster performance.
 *   **Limitation**: Valid for 7 days (Free Developer Account) or 1 year (Paid Account).
+
+Non-production app variants allow `http://` server URLs for local self-hosted testing. Production builds require `https://`.
 
 ---
 

@@ -1,5 +1,6 @@
 import { getActiveServerConfig } from '../storage';
 import { addLog } from '../LogService';
+import { isHttpServerUrlAllowed } from '../../config/appConfig';
 
 export const normalizeUrl = (url: string): string => {
   return url.endsWith('/') ? url.slice(0, -1) : url;
@@ -24,7 +25,7 @@ export async function apiFetch<T>(options: ApiFetchOptions): Promise<T> {
 
   const baseUrl = normalizeUrl(config.url);
 
-  if (!__DEV__ && baseUrl.toLowerCase().startsWith('http://')) {
+  if (!isHttpServerUrlAllowed() && baseUrl.toLowerCase().startsWith('http://')) {
     throw new Error('HTTPS is required for server connections. Please update your server URL in Settings.');
   }
 

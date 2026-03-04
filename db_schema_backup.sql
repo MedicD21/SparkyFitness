@@ -1413,7 +1413,7 @@ CREATE TABLE public.food_entries (
     food_entry_meal_id uuid,
     custom_nutrients jsonb DEFAULT '{}'::jsonb,
     meal_type_id uuid NOT NULL,
-    CONSTRAINT chk_food_or_meal_id CHECK ((((food_id IS NOT NULL) AND (meal_id IS NULL)) OR ((food_id IS NULL) AND (meal_id IS NOT NULL))))
+    CONSTRAINT chk_food_or_meal_id CHECK ((((food_id IS NOT NULL) AND (meal_id IS NULL)) OR ((food_id IS NULL) AND (meal_id IS NOT NULL)) OR ((food_id IS NULL) AND (meal_id IS NULL) AND (food_name IS NOT NULL) AND (serving_size IS NOT NULL) AND (serving_unit IS NOT NULL) AND (calories IS NOT NULL))))
 );
 
 
@@ -7191,4 +7191,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE sparky IN SCHEMA public GRANT SELECT,INSERT,DE
 --
 
 \unrestrict t9CuSs2YnePO9KyLZUL4yxaa8ne4crxjv0739eZzBTIfhVpDBH5oyhlh0uNFcjC
-

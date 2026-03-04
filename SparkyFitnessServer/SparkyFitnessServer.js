@@ -84,10 +84,15 @@ const swaggerJsdoc = require("swagger-jsdoc");
 const redoc = require("redoc-express");
 const swaggerSpecs = require("./config/swagger");
 const { createCorsOriginChecker } = require("./utils/corsHelper");
+const {
+  getSingleUserConfig,
+  isSingleUserModeEnabled,
+} = require("./utils/singleUserMode");
 
 const app = express();
 app.set("trust proxy", 1); // Trust the first proxy immediately in front of me just internal nginx. external not required.
 const PORT = process.env.SPARKY_FITNESS_SERVER_PORT || 3010;
+const singleUserModeEnabled = isSingleUserModeEnabled();
 
 console.log(
   `DEBUG: SPARKY_FITNESS_FRONTEND_URL is: ${process.env.SPARKY_FITNESS_FRONTEND_URL}`,
@@ -125,46 +130,51 @@ app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 
 // --- Better Auth Mounting ---
-let syncTrustedProviders;
-try {
-  console.log("[AUTH] Starting Better Auth mounting phase...");
-  const authModule = require("./auth");
-  const { auth } = authModule;
-  syncTrustedProviders = authModule.syncTrustedProviders;
-  const { toNodeHandler } = require("better-auth/node");
-  const betterAuthHandler = toNodeHandler(auth);
+if (singleUserModeEnabled) {
+  const singleUser = getSingleUserConfig();
+  console.log(
+    `[AUTH] Single-user mode enabled. Better Auth handlers skipped for ${singleUser.email} (${singleUser.id}).`,
+  );
+} else {
+  try {
+    console.log("[AUTH] Starting Better Auth mounting phase...");
+    const authModule = require("./auth");
+    const { auth } = authModule;
+    const { toNodeHandler } = require("better-auth/node");
+    const betterAuthHandler = toNodeHandler(auth);
 
-  // Catch ALL requests starting with /api/auth early.
-  // We use a manual check to avoid Express 5 routing complexities.
-  app.use(async (req, res, next) => {
-    if (req.originalUrl.startsWith("/api/auth")) {
-      // 1. Skip interceptor for discovery routes - let them fall through to authRoutes.js
-      const isDiscovery =
-        req.path === "/api/auth/settings" ||
-        req.path === "/api/auth/mfa-factors";
-      if (isDiscovery) {
-        return next();
-      }
+    // Catch ALL requests starting with /api/auth early.
+    // We use a manual check to avoid Express 5 routing complexities.
+    app.use(async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api/auth")) {
+        // 1. Skip interceptor for discovery routes - let them fall through to authRoutes.js
+        const isDiscovery =
+          req.path === "/api/auth/settings" ||
+          req.path === "/api/auth/mfa-factors";
+        if (isDiscovery) {
+          return next();
+        }
 
-      // 2. Manual Sign-Out Cleanup: Clear sparky_active_user_id cookie
-      if (req.method === "POST" && req.path === "/sign-out") {
+        // 2. Manual Sign-Out Cleanup: Clear sparky_active_user_id cookie
+        if (req.method === "POST" && req.path === "/sign-out") {
+          console.log(
+            "[AUTH HANDLER] Manual Cleanup: Clearing sparky_active_user_id on logout",
+          );
+          res.clearCookie("sparky_active_user_id", { path: "/" });
+        }
+
         console.log(
-          "[AUTH HANDLER] Manual Cleanup: Clearing sparky_active_user_id on logout",
+          `[AUTH HANDLER] Intercepted request: ${req.method} ${req.originalUrl}`,
         );
-        res.clearCookie("sparky_active_user_id", { path: "/" });
+
+        return betterAuthHandler(req, res);
       }
-
-      console.log(
-        `[AUTH HANDLER] Intercepted request: ${req.method} ${req.originalUrl}`,
-      );
-
-      return betterAuthHandler(req, res);
-    }
-    next();
-  });
-  console.log("[AUTH] Better Auth handler successfully mounted.");
-} catch (error) {
-  console.error("[AUTH FATAL] Initialization failed:", error);
+      next();
+    });
+    console.log("[AUTH] Better Auth handler successfully mounted.");
+  } catch (error) {
+    console.error("[AUTH FATAL] Initialization failed:", error);
+  }
 }
 
 // Log all incoming requests - AFTER auth to see what falls through
@@ -528,23 +538,35 @@ const schedulePolarSyncs = async () => {
 applyMigrations()
   .then(applyRlsPolicies)
   .then(async () => {
-    // Upsert OIDC provider from env when SPARKY_FITNESS_OIDC_ISSUER_URL + CLIENT_ID + SECRET + PROVIDER_SLUG are set
-    try {
-      const { upsertEnvOidcProvider } = require("./utils/oidcEnvConfig");
-      await upsertEnvOidcProvider();
-    } catch (err) {
-      log("error", "OIDC env provider upsert failed:", err);
-    }
-    // Sync trusted SSO providers after database is ready (so Better Auth sees env-upserted and DB providers)
-    const { syncTrustedProviders } = require("./auth");
-    if (syncTrustedProviders) {
-      await syncTrustedProviders().catch((err) =>
-        console.error("[AUTH] Post-init SSO sync failed:", err),
+    if (singleUserModeEnabled) {
+      const userRepository = require("./models/userRepository");
+      const singleUser = getSingleUserConfig();
+      await userRepository.ensureSingleUserBootstrap(singleUser);
+      log(
+        "info",
+        `[AUTH] Single-user mode ready for ${singleUser.email} (${singleUser.id}).`,
       );
+    } else {
+      // Upsert OIDC provider from env when SPARKY_FITNESS_OIDC_ISSUER_URL + CLIENT_ID + SECRET + PROVIDER_SLUG are set
+      try {
+        const { upsertEnvOidcProvider } = require("./utils/oidcEnvConfig");
+        await upsertEnvOidcProvider();
+      } catch (err) {
+        log("error", "OIDC env provider upsert failed:", err);
+      }
+      // Sync trusted SSO providers after database is ready (so Better Auth sees env-upserted and DB providers)
+      const { syncTrustedProviders } = require("./auth");
+      if (syncTrustedProviders) {
+        await syncTrustedProviders().catch((err) =>
+          console.error("[AUTH] Post-init SSO sync failed:", err),
+        );
+      }
     }
 
     scheduleBackups();
-    scheduleSessionCleanup();
+    if (!singleUserModeEnabled) {
+      scheduleSessionCleanup();
+    }
     scheduleWithingsSyncs();
     scheduleGarminSyncs();
     scheduleFitbitSyncs();

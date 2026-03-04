@@ -168,6 +168,10 @@ jest.mock('expo-constants', () => ({
   default: {
     expoConfig: {
       version: '1.0.0',
+      extra: {
+        APP_VARIANT: 'production',
+        DEFAULT_SERVER_URL: null,
+      },
     },
   },
 }));

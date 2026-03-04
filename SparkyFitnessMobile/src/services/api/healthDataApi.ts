@@ -1,6 +1,7 @@
 import { getActiveServerConfig } from '../storage';
 import { addLog } from '../LogService';
 import { normalizeUrl } from './apiClient';
+import { isHttpServerUrlAllowed } from '../../config/appConfig';
 
 export interface HealthDataPayloadItem {
   type: string;
@@ -22,7 +23,7 @@ export const syncHealthData = async (data: HealthDataPayload): Promise<unknown> 
   const { apiKey } = config;
   const url = normalizeUrl(config.url);
 
-  if (!__DEV__ && url.toLowerCase().startsWith('http://')) {
+  if (!isHttpServerUrlAllowed() && url.toLowerCase().startsWith('http://')) {
     throw new Error('HTTPS is required for server connections. Please update your server URL in Settings.');
   }
 
@@ -71,7 +72,7 @@ export const checkServerConnection = async (): Promise<boolean> => {
   const { apiKey } = config;
   const url = normalizeUrl(config.url);
 
-  if (!__DEV__ && url.toLowerCase().startsWith('http://')) {
+  if (!isHttpServerUrlAllowed() && url.toLowerCase().startsWith('http://')) {
     addLog('[API] Connection check blocked: HTTPS is required', 'WARNING');
     return false;
   }

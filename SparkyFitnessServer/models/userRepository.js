@@ -515,6 +515,66 @@ async function ensureUserInitialization(userId, fullName, existingClient = null)
   }
 }
 
+async function ensureSingleUserBootstrap(singleUser) {
+  const client = await getSystemClient();
+  const fullName = singleUser.name || singleUser.email.split('@')[0];
+  const role = singleUser.role === 'user' ? 'user' : 'admin';
+
+  try {
+    await client.query('BEGIN');
+
+    const existingByEmail = await client.query(
+      'SELECT id FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1',
+      [singleUser.email]
+    );
+
+    if (existingByEmail.rows[0] && existingByEmail.rows[0].id !== singleUser.id) {
+      throw new Error(
+        `Single-user bootstrap email ${singleUser.email} is already assigned to user ${existingByEmail.rows[0].id}.`
+      );
+    }
+
+    await client.query(
+      `INSERT INTO "user" (id, email, name, role, email_verified, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, TRUE, now(), now())
+       ON CONFLICT (id) DO UPDATE
+       SET email = EXCLUDED.email,
+           name = EXCLUDED.name,
+           role = EXCLUDED.role,
+           email_verified = TRUE,
+           updated_at = now()`,
+      [singleUser.id, singleUser.email, fullName, role]
+    );
+
+    await ensureUserInitialization(singleUser.id, fullName, client);
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const preferenceClient = await getSystemClient();
+  try {
+    const existingPreferences = await preferenceClient.query(
+      'SELECT 1 FROM user_nutrient_display_preferences WHERE user_id = $1 LIMIT 1',
+      [singleUser.id]
+    );
+
+    if (existingPreferences.rowCount === 0) {
+      const {
+        createDefaultNutrientPreferencesForUser,
+      } = require('../services/nutrientDisplayPreferenceService');
+
+      await createDefaultNutrientPreferencesForUser(singleUser.id);
+    }
+  } finally {
+    preferenceClient.release();
+  }
+}
+
 module.exports = {
   createUser,
   createOidcUser,
@@ -543,4 +603,5 @@ module.exports = {
   getMfaSettings,
   isOidcUser,
   ensureUserInitialization,
+  ensureSingleUserBootstrap,
 };

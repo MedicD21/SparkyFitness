@@ -1,14 +1,11 @@
-import "tsx/cjs";
+import 'tsx/cjs';
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
-const APP_NAME = 'SparkyFitness';
-const APP_SLUG = 'sparkyfitnessmobile';
-const ANDROID_PROD_BUNDLE_IDENTIFIER = 'org.SparkyApps.SparkyFitnessMobile';
-const IOS_PROD_BUNDLE_IDENTIFIER = 'com.SparkyApps.SparkyFitnessMobile';
-const DEV_BUNDLE_IDENTIFIER = 'org.SparkyApps.SparkyFitnessMobile.dev';
-
-const DEV_PACKAGE = DEV_BUNDLE_IDENTIFIER;
-const PROD_PACKAGE = ANDROID_PROD_BUNDLE_IDENTIFIER;
+const DEFAULT_APP_NAME = 'SparkyFitness';
+const DEFAULT_APP_SLUG = 'sparkyfitnessmobile';
+const DEFAULT_ANDROID_PROD_PACKAGE = 'org.SparkyApps.SparkyFitnessMobile';
+const DEFAULT_IOS_PROD_BUNDLE_IDENTIFIER = 'com.SparkyApps.SparkyFitnessMobile';
+const DEFAULT_DEV_BUNDLE_IDENTIFIER = 'org.SparkyApps.SparkyFitnessMobile.dev';
 
 const androidPermissions = [
   'android.permission.INTERNET',
@@ -45,7 +42,7 @@ const androidPermissions = [
   'android.permission.health.READ_VO2_MAX',
   'android.permission.health.READ_WEIGHT',
   'android.permission.health.READ_WHEELCHAIR_PUSHES',
-  'android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND'  
+  'android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND',
 ];
 
 const devAndroidPermissions = [
@@ -84,46 +81,103 @@ const devAndroidPermissions = [
   'android.permission.health.WRITE_WHEELCHAIR_PUSHES',
 ];
 
-export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
-  const environment = process.env.APP_VARIANT || 'dev';
+const readStringEnv = (name: string, fallback: string): string => {
+  const value = process.env[name]?.trim();
+  return value ? value : fallback;
+};
 
-  const isDev = environment === 'dev' || environment === 'development';
+const readOptionalStringEnv = (name: string): string | undefined => {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+};
 
-  if (isDev) {
-    androidPermissions.push(...devAndroidPermissions);
+const readBooleanEnv = (name: string, fallback: boolean): boolean => {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) {
+    return fallback;
   }
 
-  // Plugins only included in production builds
-  const prodPlugins = [
-    './plugins/withNetworkSecurityConfig',
-  ];
+  if (['1', 'true', 'yes', 'on'].includes(value)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(value)) {
+    return false;
+  }
+
+  return fallback;
+};
+
+const normalizeAppVariant = (value: string): string => {
+  return value.trim().toLowerCase();
+};
+
+const isProductionVariant = (value: string): boolean => {
+  return value === 'prod' || value === 'production';
+};
+
+export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
+  const environment = normalizeAppVariant(process.env.APP_VARIANT || 'dev');
+  const isDev = !isProductionVariant(environment);
+
+  const appName = readStringEnv('APP_NAME', DEFAULT_APP_NAME);
+  const appSlug = readStringEnv('APP_SLUG', DEFAULT_APP_SLUG);
+
+  const iosProdBundleIdentifier = readStringEnv(
+    'IOS_BUNDLE_IDENTIFIER',
+    DEFAULT_IOS_PROD_BUNDLE_IDENTIFIER
+  );
+  const iosDevBundleIdentifier = readStringEnv(
+    'IOS_DEV_BUNDLE_IDENTIFIER',
+    DEFAULT_DEV_BUNDLE_IDENTIFIER
+  );
+  const androidProdPackage = readStringEnv(
+    'ANDROID_PACKAGE',
+    DEFAULT_ANDROID_PROD_PACKAGE
+  );
+  const androidDevPackage = readStringEnv(
+    'ANDROID_DEV_PACKAGE',
+    DEFAULT_DEV_BUNDLE_IDENTIFIER
+  );
+  const appleTeamId = readOptionalStringEnv('IOS_APPLE_TEAM_ID');
+  const defaultServerUrl = readOptionalStringEnv('DEFAULT_SERVER_URL');
+  const allowHttpInDev = isDev && readBooleanEnv('IOS_ALLOW_HTTP_IN_DEV', true);
+
+  const prodPlugins = ['./plugins/withNetworkSecurityConfig'];
 
   return {
     ...config,
-    name: APP_NAME,
-    slug: APP_SLUG,
+    name: appName,
+    slug: appSlug,
     ios: {
-      bundleIdentifier: isDev
-        ? DEV_BUNDLE_IDENTIFIER
-        : IOS_PROD_BUNDLE_IDENTIFIER,
+      ...config.ios,
+      bundleIdentifier: isDev ? iosDevBundleIdentifier : iosProdBundleIdentifier,
+      appleTeamId,
       supportsTablet: false,
       infoPlist: {
-        NSAppTransportSecurity: {
-          NSAllowsArbitraryLoads: false,
-        },
+        ...config.ios?.infoPlist,
+        NSAppTransportSecurity: allowHttpInDev
+          ? {
+              NSAllowsArbitraryLoads: true,
+              NSAllowsLocalNetworking: true,
+            }
+          : {
+              NSAllowsArbitraryLoads: false,
+            },
         ITSAppUsesNonExemptEncryption: false,
       },
       icon: './assets/icons/appicon.icon',
     },
     android: {
-      package: isDev
-        ? DEV_PACKAGE
-        : PROD_PACKAGE,
-      permissions: androidPermissions,
+      ...config.android,
+      package: isDev ? androidDevPackage : androidProdPackage,
+      permissions: isDev
+        ? [...androidPermissions, ...devAndroidPermissions]
+        : [...androidPermissions],
       adaptiveIcon: {
         foregroundImage: './assets/icons/adaptiveicon.png',
         backgroundColor: '#FFFFFF',
-      }
+      },
     },
     plugins: [
       ...(config.plugins ?? []),
@@ -132,8 +186,9 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
     extra: {
       ...config.extra,
       APP_VARIANT: environment,
+      ...(defaultServerUrl ? { DEFAULT_SERVER_URL: defaultServerUrl } : {}),
       eas: {
-        projectId: "498a86c5-344f-4d2c-9033-dfd720e4a383",
+        projectId: '498a86c5-344f-4d2c-9033-dfd720e4a383',
       },
     },
   };

@@ -3,6 +3,10 @@ const router = express.Router();
 const { log } = require('../../config/logging');
 const globalSettingsRepository = require('../../models/globalSettingsRepository');
 const oidcProviderRepository = require('../../models/oidcProviderRepository');
+const {
+    getSingleUserConfig,
+    isSingleUserModeEnabled,
+} = require('../../utils/singleUserMode');
 
 /**
  * @swagger
@@ -15,6 +19,18 @@ const oidcProviderRepository = require('../../models/oidcProviderRepository');
  *         description: Login settings and OIDC providers
  */
 router.get('/settings', async (req, res) => {
+    if (isSingleUserModeEnabled()) {
+        const singleUser = getSingleUserConfig();
+        return res.json({
+            email: { enabled: false },
+            oidc: { enabled: false, providers: [], auto_redirect: false },
+            single_user: {
+                enabled: true,
+                display_name: singleUser.name,
+            },
+        });
+    }
+
     try {
         const [globalSettings, providers] = await Promise.all([
             globalSettingsRepository.getGlobalSettings(),
@@ -77,6 +93,13 @@ router.get('/settings', async (req, res) => {
  *         description: Email is required
  */
 router.get('/mfa-factors', async (req, res) => {
+    if (isSingleUserModeEnabled()) {
+        return res.json({
+            mfa_totp_enabled: false,
+            mfa_email_enabled: false
+        });
+    }
+
     const { email } = req.query;
     if (!email) {
         return res.status(400).json({ error: 'Email is required' });

@@ -1,5 +1,12 @@
 const crypto = require('crypto');
 const { log } = require('../config/logging');
+const {
+  getSingleUserConfig,
+  isSingleUserModeEnabled,
+} = require('./singleUserMode');
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function runPreflightChecks() {
   const mandatoryVars = {
@@ -39,6 +46,32 @@ function runPreflightChecks() {
     console.warn('------------------------------------------------------------------\n');
 
     log('warn', 'BETTER_AUTH_SECRET was missing and auto-generated.');
+  }
+
+  if (isSingleUserModeEnabled()) {
+    const singleUser = getSingleUserConfig();
+    const singleUserErrors = [];
+    const rawRole = process.env.SPARKY_FITNESS_SINGLE_USER_ROLE?.trim().toLowerCase();
+
+    if (!UUID_PATTERN.test(singleUser.id)) {
+      singleUserErrors.push('SPARKY_FITNESS_SINGLE_USER_ID must be a valid UUID.');
+    }
+
+    if (!EMAIL_PATTERN.test(singleUser.email)) {
+      singleUserErrors.push('SPARKY_FITNESS_SINGLE_USER_EMAIL must be a valid email address.');
+    }
+
+    if (rawRole && !['admin', 'user'].includes(rawRole)) {
+      singleUserErrors.push("SPARKY_FITNESS_SINGLE_USER_ROLE must be either 'admin' or 'user'.");
+    }
+
+    if (singleUserErrors.length > 0) {
+      console.error('\x1b[31m%s\x1b[0m', 'FATAL: Invalid single-user mode configuration!');
+      singleUserErrors.forEach((message) => console.error(`- ${message}`));
+      process.exit(1);
+    }
+
+    log('info', `Single-user mode enabled for ${singleUser.email} (${singleUser.id}).`);
   }
 
   log('info', 'Environment variable pre-flight checks passed successfully.');
